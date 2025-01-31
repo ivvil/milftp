@@ -60,7 +60,11 @@
       };
 
       devShells.default = pkgs.mkShell {
-        packages = [libmill];
+        packages = with pkgs; [
+          libmill
+          libcxx
+          bear
+        ];
       };
     });
 }
