@@ -1,8 +1,14 @@
 #include "fs.h"
-#include <dirent.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#inclide <windows.h>
+#else
+#include <dirent.h>
+#endif
 
 #define CHAR_BUFFER_INITIAL_SIZE 256
 
@@ -16,49 +22,49 @@
  *  error
  */
 char *dirlist(const char *dirname) {
-  DIR *dir;
-  struct dirent *ent;
-  size_t buf_size = CHAR_BUFFER_INITIAL_SIZE;
-  size_t buf_used = 0;
-  char *buf = (char *)calloc(buf_size, sizeof(char));
+  char* res = NULL;
+  size_t resSize = CHAR_BUFFER_INITIAL_SIZE;
+  size_t used = 0;
 
-  if (buf == NULL) {
-    perror("Failed to allocate memory");
+  DIR *dir = opendir(dirname);
+  if (!dir) {
     return NULL;
   }
 
-  if ((dir = opendir(dirname)) == NULL) {
-    perror("Can't open directory");
-    free(buf);
-    return NULL;
+  res = malloc(CHAR_BUFFER_INITIAL_SIZE);
+  if (!res) goto posix_error;
+  res[0] = '\0';
+
+  struct dirent *entry;
+  while ((entry = readdir(dir))) {
+	const char *fname = entry->d_name;
+	if (strcmp(fname, ".") == 0 || strcmp(fname, "..") == 0) continue;
+
+	size_t len = strlen(fname);
+	size_t req = used + len + 2;
+
+	if (req > resSize) {
+	  resSize *= 2;
+	  if (resSize < req) resSize = req;
+
+	  char *tmp = realloc(res, resSize);
+	  if (!tmp) goto posix_error;
+	  res = tmp;
+	}
+
+	memcpy(res + used, fname, len);
+	
+	used += len;
+	res[used++] = '\n';
+	res[used] = '\0';
   }
-
-  while ((ent = readdir(dir)) != NULL) {
-    const char *name = ent->d_name;
-
-    // Calculate the required space for this entry
-    size_t name_len = strlen(name);
-    size_t entry_len = name_len + 2; // Space for "name  "
-
-    // Resize the buffer if necessary
-    if (buf_used + entry_len + 1 > buf_size) {
-      buf_size = buf_used + entry_len + CHAR_BUFFER_INITIAL_SIZE;
-      char *new_buf = realloc(buf, buf_size);
-      if (new_buf == NULL) {
-        perror("Failed to reallocate memory");
-        free(buf);
-        closedir(dir);
-        return NULL;
-      }
-      buf = new_buf;
-    }
-
-    // Append the entry to the buffer
-    strcat(buf + buf_used, name);
-    strcat(buf + buf_used + name_len, "  ");
-    buf_used += entry_len;
-  }
-
   closedir(dir);
-  return buf;
+
+  char *final = realloc(res, used + 1);
+  return final ? final : res;
+
+ posix_error:
+  closedir(dir);
+  free(dir);
+  return NULL;
 }
